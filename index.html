@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>3Dデジタル折り紙ミュージアム | iPad Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Shippori+Mincho:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --origami-shu: #e11d48;     /* 朱色（山折り） */
+      --origami-gunjo: #2563eb;   /* 群青（谷折り） */
+      --origami-yamabuki: #f59e0b;/* 山吹（金箔） */
+      --origami-wakatake: #10b981;/* 若竹 */
+      --origami-fuji: #8b5cf6;    /* 藤色 */
+    }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #0e1017;
+      color: #f8fafc;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+    .font-wafu {
+      font-family: 'Shippori Mincho', 'Noto Sans JP', serif;
+    }
+    /* スクロール可能エリアのみタッチスクロール許可 */
+    .scrollable-area {
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+    .scrollable-x {
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.35);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(245, 158, 11, 0.45);
+      border-radius: 4px;
+    }
+
+    /* 和紙ガラスパネル */
+    .washi-panel {
+      background: rgba(18, 22, 34, 0.86);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+
+    /* 折り紙の角折り返し（ドッグイヤー）風デザイン */
+    .origami-card {
+      position: relative;
+      background: linear-gradient(145deg, rgba(24, 29, 44, 0.92), rgba(15, 19, 30, 0.95));
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    }
+    .origami-card::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(225deg, transparent 50%, rgba(251, 191, 36, 0.35) 50%);
+      border-bottom-left-radius: 6px;
+      pointer-events: none;
+    }
+
+    /* 展開図モチーフの境界線（山折り・谷折り） */
+    .crease-line-mountain {
+      border-bottom: 2px dashed rgba(244, 63, 94, 0.65);
+    }
+    .crease-line-valley {
+      border-bottom: 2px dotted rgba(59, 130, 246, 0.7);
+    }
+
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.35); }
+      50% { box-shadow: 0 0 26px rgba(245, 158, 11, 0.75); }
+    }
+    .btn-origami-gold {
+      background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%);
+      color: #0f172a;
+      font-weight: 900;
+      animation: pulse-gold 3s infinite;
+    }
+    .tap-btn {
+      transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+    }
+    .tap-btn:active {
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 3Dミュージアムキャンバス -->
+  <div id="canvas-container" class="fixed inset-0 w-full h-full z-0"></div>
+
+  <!-- ========================================================= -->
+  <!-- トップヘッダーUI（iPad向け大きめタッチターゲット） -->
+  <!-- ========================================================= -->
+  <header class="fixed top-0 left-0 right-0 z-10 p-3.5 md:p-5 flex flex-wrap items-center justify-between gap-2.5 pointer-events-none">
+    <!-- 左：折り紙ロゴ＆館長ランク -->
+    <div class="washi-panel rounded-2xl px-3.5 py-2.5 md:px-4 md:py-3 pointer-events-auto flex items-center gap-3">
+      <!-- 折り鶴幾何学SVGアイコン -->
+      <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 via-amber-500 to-amber-400 flex items-center justify-center shadow-lg shrink-0 relative overflow-hidden">
+        <svg class="w-7 h-7 text-slate-950" viewBox="0 0 32 32" fill="currentColor">
+          <polygon points="16,3 22,14 16,18 10,14" opacity="0.95"/>
+          <polygon points="2,11 16,18 11,22" opacity="0.8"/>
+          <polygon points="30,11 16,18 21,22" opacity="0.8"/>
+          <polygon points="16,18 21,22 16,29 11,22" opacity="0.9"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="font-wafu text-base md:text-xl font-extrabold tracking-wide text-amber-300">3D折り紙ミュージアム</h1>
+          <span id="curator-rank" class="text-[11px] md:text-xs bg-amber-500/20 text-amber-200 border border-amber-400/40 px-2.5 py-0.5 rounded-full font-bold">
+            館長Lv.1 はじまりの展示室
+          </span>
+        </div>
+        <p class="text-[11px] md:text-xs text-slate-300 mt-0.5 hidden sm:block">指でスワイプして360°回転・ピンチで拡大</p>
+      </div>
+    </div>
+
+    <!-- 右：操作ボタン群 -->
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <!-- 展示室テーマ切替 -->
+      <button id="btn-theme" class="tap-btn washi-panel hover:bg-slate-800/90 text-slate-100 px-3.5 py-3 rounded-2xl text-xs md:text-sm font-bold flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] shrink-0"></span>
+        <span id="theme-label">漆黒×金箔</span>
+      </button>
+
+      <!-- 自動回転ON/OFF -->
+      <button id="btn-autorotate" class="tap-btn washi-panel hover:bg-slate-800/90 text-amber-300 px-3.5 py-3 rounded-2xl text-xs md:text-sm font-bold flex items-center gap-1.5" title="自動回転のオン/オフ">
+        <svg id="icon-rotate" class="w-5 h-5 animate-spin shrink-0" style="animation-duration: 7s;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        <span class="hidden md:inline">自動回転</span>
+      </button>
+
+      <!-- 正面視点リセット -->
+      <button id="btn-reset-view" class="tap-btn washi-panel hover:bg-slate-800/90 text-slate-200 px-3 py-3 rounded-2xl text-xs md:text-sm font-bold flex items-center gap-1.5" title="カメラを正面にもどす">
+        <svg class="w-5 h-5 shrink-0 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+        <span class="hidden lg:inline">正面</span>
+      </button>
+
+      <!-- 収蔵庫（整理・一覧）ボタン -->
+      <button id="btn-open-organize" class="tap-btn washi-panel hover:bg-slate-800/90 text-sky-300 border-sky-400/40 px-3.5 py-3 rounded-2xl text-xs md:text-sm font-bold flex items-center gap-1.5">
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+        <span>収蔵庫<span id="badge-total-count" class="ml-1 bg-sky-500/25 text-sky-200 px-1.5 py-0.2 rounded-md text-[11px]">0</span></span>
+      </button>
+
+      <!-- 作品を登録ボタン -->
+      <button id="btn-open-modal" class="tap-btn btn-origami-gold px-4 md:px-5 py-3 rounded-2xl text-xs md:text-base flex items-center gap-2 cursor-pointer">
+        <svg class="w-5 h-5 stroke-[2.5] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        <span>作品を登録</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- 0作品時のウェルカムガイドカード（光の折り鶴展示中） -->
+  <!-- ========================================================= -->
+  <section id="empty-state-card" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-10 w-[calc(100%-2rem)] max-w-md origami-card rounded-3xl p-5 md:p-6 text-center space-y-3.5">
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold">
+      <span>✨ キミだけの折り紙美術館へようこそ</span>
+    </div>
+    <h2 class="font-wafu text-xl md:text-2xl font-extrabold text-white leading-snug">
+      最初の折り紙作品を<br class="sm:hidden" />展示しよう！
+    </h2>
+    <p class="text-xs md:text-sm text-slate-300 leading-relaxed">
+      iPadのカメラで作品のまわりをぐるっと5秒撮影するか、撮った動画・写真を選ぶだけで360°回転する3D展示品になるよ！
+    </p>
+    <div class="pt-1">
+      <button id="btn-empty-start" class="tap-btn btn-origami-gold w-full py-3.5 px-6 rounded-2xl text-base flex items-center justify-center gap-2 cursor-pointer shadow-xl">
+        <svg class="w-6 h-6 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        <span>カメラで1作品目を登録する！</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ========================================================= -->
+  <!-- 左下：学芸員キャプションプレート（作品登録後に表示） -->
+  <!-- ========================================================= -->
+  <aside id="caption-card" class="hidden fixed bottom-28 md:bottom-32 left-3.5 md:left-5 z-10 w-[calc(100%-1.75rem)] sm:w-[400px] origami-card rounded-3xl p-4 md:p-5 transition-all duration-300">
+    <div class="flex items-start justify-between gap-2 mb-2.5 pr-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span id="art-number" class="text-[11px] font-bold tracking-widest text-amber-400 uppercase bg-amber-500/15 px-2 py-0.5 rounded-md">No.001</span>
+          <span id="art-stars" class="text-sm text-amber-400 tracking-tight">★★★★★</span>
+        </div>
+        <h2 id="art-title" class="font-wafu text-lg md:text-xl font-extrabold text-white truncate">作品タイトル</h2>
+      </div>
+
+      <!-- プレート操作ボタン（お気に入り・編集・折りたたみ・削除） -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-toggle-fav" class="tap-btn p-2 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-400 hover:text-amber-300" title="お気に入り（殿堂入り）">
+          <span id="fav-icon" class="text-base leading-none">☆</span>
+        </button>
+        <button id="btn-edit-art" class="tap-btn px-2.5 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-xs font-bold flex items-center gap-1" title="作品情報を編集する">
+          <span>✏️</span>
+          <span>編集</span>
+        </button>
+        <button id="btn-toggle-caption" class="tap-btn text-slate-300 hover:text-white p-2 rounded-xl bg-slate-800/70" title="プレートをたたむ/ひらく">
+          <svg id="chevron-icon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="caption-body" class="space-y-2.5 text-xs md:text-sm">
+      <!-- メタ情報 -->
+      <div class="grid grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-2xl border border-white/10">
+        <div>
+          <span class="text-slate-400 block text-[10px]">使った紙のサイズ</span>
+          <span id="art-paper" class="font-bold text-amber-200">24cm</span>
+        </div>
+        <div>
+          <span class="text-slate-400 block text-[10px]">記録日</span>
+          <span id="art-meta" class="font-bold text-slate-100">2026/11/27</span>
+        </div>
+      </div>
+
+      <!-- 技タグ -->
+      <div id="art-tags" class="flex flex-wrap gap-1.5"></div>
+
+      <!-- こだわりコメント -->
+      <p id="art-notes" class="scrollable-area text-slate-200 leading-relaxed bg-slate-950/45 p-2.5 rounded-2xl border border-white/5 max-h-20 overflow-y-auto text-xs"></p>
+
+      <!-- フッター：360度インジケーター＆片付けボタン -->
+      <div class="flex items-center justify-between pt-1.5 border-t border-slate-800/90 text-xs">
+        <div id="angle-indicator" class="flex items-center gap-1.5 text-amber-300 font-bold">
+          <span>🔄 アングル</span>
+          <span id="angle-step-text" class="font-mono bg-amber-500/20 px-2 py-0.5 rounded-md">1 / 12</span>
+        </div>
+        <button id="btn-delete-art" class="tap-btn text-rose-400 hover:text-rose-300 px-2 py-1 rounded-lg hover:bg-rose-950/50 text-[11px] font-bold flex items-center gap-1">
+          <span>🗑️ 展示から片付ける</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- 下部：展示作品コレクションドック（作品がある時のみ表示） -->
+  <!-- ========================================================= -->
+  <footer id="dock-footer" class="hidden fixed bottom-3.5 left-3.5 right-3.5 md:left-5 md:right-5 z-10 justify-center pointer-events-none">
+    <div id="gallery-dock" class="scrollable-x washi-panel rounded-2xl p-2 flex items-center gap-2 overflow-x-auto max-w-full pointer-events-auto">
+      <!-- JSでサムネイルボタンを生成 -->
+    </div>
+  </footer>
+
+  <!-- ========================================================= -->
+  <!-- モーダル①：iPadかんたん動画・写真登録 -->
+  <!-- ========================================================= -->
+  <div id="modal-add" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6">
+    <div class="origami-card rounded-3xl w-full max-w-2xl max-h-[92dvh] flex flex-col overflow-hidden">
+      
+      <!-- モーダルヘッダー -->
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0 pr-8">
+        <div>
+          <h3 class="font-wafu text-lg md:text-xl font-extrabold text-amber-300 flex items-center gap-2">
+            <span>📸 新しい折り紙作品を登録</span>
+          </h3>
+          <p class="text-xs text-slate-300 mt-0.5">まわりをぐるっと撮影すると360°回転する展示品になるよ！</p>
+        </div>
+        <button id="btn-close-modal" class="tap-btn text-slate-300 hover:text-white p-2.5 rounded-2xl bg-slate-800">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- スクロール可能なフォーム本体 -->
+      <div class="scrollable-area p-5 md:p-6 overflow-y-auto space-y-6">
+        
+        <!-- STEP 1: 動画撮影または動画・写真選択 -->
+        <section class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm md:text-base font-black text-white flex items-center gap-2">
+              <span class="w-6 h-6 rounded-full bg-rose-500 text-white font-black text-xs flex items-center justify-center shadow">1</span>
+              <span>作品を撮影しよう！</span>
+            </span>
+            <span id="capture-status-badge" class="hidden text-xs font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-400/40 px-2.5 py-1 rounded-full">
+              ✅ 撮影完了！
+            </span>
+          </div>
+
+          <!-- 撮影方法の2大ボタン（初期状態） -->
+          <div id="capture-choice-box" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- ボタンA：iPadのカメラで今すぐ360°スキャン -->
+            <button type="button" id="btn-start-live-cam" class="tap-btn flex flex-col items-center justify-center p-5 rounded-2xl bg-gradient-to-br from-rose-500/20 via-amber-500/15 to-amber-600/10 border-2 border-amber-400/60 hover:border-amber-300 text-center gap-2 cursor-pointer">
+              <div class="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+              </div>
+              <div class="font-black text-base text-amber-300">カメラでぐるっと撮影</div>
+              <p class="text-xs text-slate-300 leading-snug">ボタンをおして5秒間、作品のまわりを1周するだけ！</p>
+            </button>
+
+            <!-- ボタンB：撮った動画 / カメラアプリから選ぶ -->
+            <label class="tap-btn flex flex-col items-center justify-center p-5 rounded-2xl bg-slate-900/90 border-2 border-dashed border-sky-400/50 hover:border-sky-300 text-center gap-2 cursor-pointer">
+              <div class="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-300 border border-sky-400/40 flex items-center justify-center">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              </div>
+              <div class="font-black text-base text-sky-300">動画・写真からえらぶ</div>
+              <p class="text-xs text-slate-300 leading-snug">iPadで撮った動画や写真（1枚〜複数枚）から作るよ</p>
+              <input id="input-media-file" type="file" accept="video/*,image/*" multiple class="hidden" />
+            </label>
+          </div>
+
+          <!-- ライブカメラ撮影エリア -->
+          <div id="live-cam-box" class="hidden flex-col items-center bg-slate-950 rounded-2xl p-4 border border-amber-400/50 space-y-3">
+            <div class="relative w-full max-w-sm aspect-square rounded-2xl overflow-hidden bg-black border-2 border-slate-700">
+              <video id="live-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+              <!-- 展開図風の照準ガイド -->
+              <div class="absolute inset-4 border-2 border-dashed border-amber-400/80 rounded-full pointer-events-none flex flex-col items-center justify-between py-3">
+                <span id="cam-counter-badge" class="bg-black/75 text-amber-300 text-xs font-mono font-bold px-2.5 py-0.5 rounded-full">
+                  READY
+                </span>
+                <span id="cam-guide-text" class="bg-black/75 text-white text-xs font-bold px-3 py-1.5 rounded-full text-center">
+                  作品を真ん中に入れてね
+                </span>
+              </div>
+              <!-- 録画プログレスバー -->
+              <div id="rec-progress-wrap" class="hidden absolute bottom-0 left-0 right-0 h-3 bg-slate-900">
+                <div id="rec-progress-bar" class="h-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-400 w-0 transition-all duration-100"></div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3 w-full max-w-sm justify-center">
+              <button type="button" id="btn-cancel-cam" class="tap-btn px-4 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-sm">
+                もどる
+              </button>
+              <button type="button" id="btn-trigger-scan" class="tap-btn flex-1 py-3.5 px-5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-base flex items-center justify-center gap-2 shadow-lg">
+                <span class="w-3.5 h-3.5 rounded-full bg-white animate-pulse"></span>
+                <span id="btn-scan-label">スキャン開始（5秒）</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 動画解析中のプログレス表示 -->
+          <div id="video-processing-box" class="hidden flex-col items-center justify-center p-6 rounded-2xl bg-slate-900 border border-sky-500/40 text-center space-y-2">
+            <div class="w-9 h-9 border-4 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm font-bold text-amber-300">動画から360°アングルを自動切り出し中...</p>
+            <p id="video-progress-text" class="text-xs text-slate-400">しばらくお待ちください</p>
+          </div>
+
+          <!-- 抽出完了プレビュー（360°確認スライダー付き） -->
+          <div id="extracted-preview-box" class="hidden bg-slate-900/95 border border-emerald-400/50 rounded-2xl p-4 space-y-3">
+            <div class="flex items-center gap-4">
+              <div class="relative w-24 h-24 md:w-28 md:h-28 rounded-2xl overflow-hidden border-2 border-amber-400 shrink-0 bg-black">
+                <img id="preview-turntable-img" src="" class="w-full h-full object-cover" />
+                <span id="preview-angle-badge" class="absolute bottom-1 right-1 bg-black/80 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                  1/12
+                </span>
+              </div>
+              <div class="flex-1 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-emerald-300">✨ 360°プレビュー（スライダーで回せるよ）</span>
+                  <button type="button" id="btn-retake" class="tap-btn text-xs text-slate-300 underline hover:text-white">
+                    撮りなおす
+                  </button>
+                </div>
+                <input id="preview-angle-slider" type="range" min="0" max="11" value="0" class="w-full accent-amber-400 h-2.5 bg-slate-700 rounded-lg cursor-pointer" />
+                <p class="text-[11px] text-slate-300">全 <span id="extracted-count-text" class="text-amber-300 font-bold">12</span> アングルの立体データを作成しました！</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 2: かんたんプレート入力（色紙カラー＆ワンタップ選択） -->
+        <form id="form-add-art" class="space-y-5 pt-4 border-t border-slate-800">
+          <div class="text-sm md:text-base font-black text-white flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow">2</span>
+            <span>作品の名前とメモ（タップでかんたん入力）</span>
+          </div>
+
+          <!-- 色紙カラージャンルワンタップ補助 -->
+          <div>
+            <label class="block text-xs font-bold text-slate-400 mb-1.5">ジャンルをえらぶと名前とタグがかんたんに入るよ：</label>
+            <div id="preset-genre-buttons" class="flex flex-wrap gap-2">
+              <!-- JSで生成 -->
+            </div>
+          </div>
+
+          <!-- 作品名入力 -->
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">作品のタイトル <span class="text-rose-400">*</span></label>
+            <input id="input-title" type="text" required placeholder="例：エンシェント・ドラゴン" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-3 text-white text-base font-bold outline-none" />
+          </div>
+
+          <!-- 難易度（星タップ）＆ 紙のサイズ（ワンタップ） -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">むずかしさレベル</label>
+              <div id="star-selector" class="flex items-center gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-700 justify-around">
+                <!-- JSで1〜5の星ボタン生成 -->
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1.5">使った紙のサイズ</label>
+              <div id="paper-size-buttons" class="grid grid-cols-5 gap-1">
+                <!-- JSでワンタップサイズボタン生成 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 使った技タグ（任意・ワンタップ） -->
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">使った技・特徴（あてはまるものをタップ）</label>
+            <div id="tech-tag-selector" class="flex flex-wrap gap-2"></div>
+          </div>
+
+          <!-- ひとことメモ（任意） -->
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">工夫したポイント（書かなくてもOK！）</label>
+            <input id="input-notes" type="text" placeholder="例：ツノの沈め折りをがんばった！" class="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-2xl px-4 py-2.5 text-white text-sm outline-none" />
+          </div>
+
+          <!-- 登録ボタン -->
+          <div class="pt-2 flex items-center justify-end gap-3">
+            <button type="button" id="btn-cancel-modal" class="tap-btn px-5 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm">
+              キャンセル
+            </button>
+            <button type="submit" id="btn-submit-art" class="tap-btn px-7 py-3.5 rounded-2xl text-base cursor-pointer bg-slate-800 border border-slate-600 text-slate-400 font-bold transition-all">
+              📸 まずステップ1で撮影してね
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- モーダル②：作品情報の編集＆正面アングル調整 -->
+  <!-- ========================================================= -->
+  <div id="modal-edit" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6">
+    <div class="origami-card rounded-3xl w-full max-w-xl max-h-[92dvh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0 pr-8">
+        <div>
+          <h3 class="font-wafu text-lg md:text-xl font-extrabold text-sky-300">✏️ 作品プレートの編集</h3>
+          <p class="text-xs text-slate-300 mt-0.5">タイトルやメモの書き直し、正面の向きの調整ができるよ</p>
+        </div>
+        <button id="btn-close-edit" class="tap-btn text-slate-300 hover:text-white p-2.5 rounded-2xl bg-slate-800">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <form id="form-edit-art" class="scrollable-area p-5 md:p-6 overflow-y-auto space-y-5">
+        <!-- 正面アングル調整（複数枚ある場合） -->
+        <div id="edit-angle-box" class="bg-slate-950/80 border border-amber-400/40 rounded-2xl p-3.5 space-y-2.5">
+          <div class="flex items-center gap-3.5">
+            <img id="edit-preview-img" src="" class="w-20 h-20 rounded-xl object-cover border-2 border-amber-400 shrink-0 bg-black" />
+            <div class="flex-1 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-300">🔄 正面（表紙）の向きを調整</span>
+                <span id="edit-angle-label" class="text-xs font-mono text-slate-300">1 / 12</span>
+              </div>
+              <input id="edit-angle-slider" type="range" min="0" max="11" value="0" class="w-full accent-amber-400 h-2 bg-slate-700 rounded-lg cursor-pointer" />
+              <button type="button" id="btn-set-front-angle" class="tap-btn w-full py-1.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold">
+                この角度を正面（表紙）にセットする
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">作品のタイトル <span class="text-rose-400">*</span></label>
+          <input id="edit-title" type="text" required class="w-full bg-slate-950 border-2 border-slate-700 focus:border-sky-400 rounded-2xl px-4 py-3 text-white text-base font-bold outline-none" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">むずかしさレベル</label>
+            <div id="edit-star-selector" class="flex items-center gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-700 justify-around"></div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">使った紙のサイズ</label>
+            <div id="edit-paper-size-buttons" class="grid grid-cols-5 gap-1"></div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">使った技・特徴</label>
+          <div id="edit-tech-tag-selector" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">工夫したポイント</label>
+          <input id="edit-notes" type="text" class="w-full bg-slate-950 border border-slate-700 focus:border-sky-400 rounded-2xl px-4 py-2.5 text-white text-sm outline-none" />
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-3">
+          <button type="button" id="btn-cancel-edit" class="tap-btn px-5 py-3 rounded-2xl bg-slate-800 text-slate-300 font-bold text-sm">
+            もどる
+          </button>
+          <button type="submit" class="tap-btn px-6 py-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-sm shadow-lg">
+            💾 変更を保存する
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- モーダル③：ミュージアム収蔵庫（一覧・並び替え・整理） -->
+  <!-- ========================================================= -->
+  <div id="modal-organize" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/85 backdrop-blur-md p-3 md:p-6">
+    <div class="origami-card rounded-3xl w-full max-w-4xl max-h-[92dvh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 shrink-0 pr-8">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-wafu text-lg md:text-xl font-extrabold text-amber-300">📚 ミュージアム収蔵庫（整理・一覧）</h3>
+            <span id="db-status-badge" class="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full">💾 自動保存ON</span>
+          </div>
+          <p class="text-xs text-slate-300 mt-0.5">展示する順番を入れ替えたり、お気に入り作品を探したりできるよ</p>
+        </div>
+        <button id="btn-close-organize" class="tap-btn text-slate-300 hover:text-white p-2.5 rounded-2xl bg-slate-800">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- フィルター＆一括並び替えツールバー -->
+      <div class="px-5 py-3 bg-slate-900/70 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+        <!-- 絞り込みタブ -->
+        <div class="flex items-center gap-1.5">
+          <button type="button" data-filter="all" class="org-filter-btn tap-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-slate-950">
+            すべて
+          </button>
+          <button type="button" data-filter="fav" class="org-filter-btn tap-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300">
+            👑 お気に入り
+          </button>
+          <button type="button" data-filter="hard" class="org-filter-btn tap-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-300">
+            ★★★★★ 超難関
+          </button>
+        </div>
+
+        <!-- 一括並び替えボタン -->
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] text-slate-400 hidden sm:inline">並び替え:</span>
+          <button type="button" id="btn-sort-newest" class="tap-btn px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold">
+            新しい順
+          </button>
+          <button type="button" id="btn-sort-diff" class="tap-btn px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold">
+            むずかしい順
+          </button>
+          <button type="button" id="btn-sort-fav" class="tap-btn px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold">
+            👑 優先順
+          </button>
+        </div>
+      </div>
+
+      <!-- 作品カード一覧グリッド -->
+      <div id="organize-grid" class="scrollable-area p-5 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 flex-1">
+        <!-- JSでカード生成 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- カスタム確認ダイアログ（confirm()の代替・最前面z-[60]） -->
+  <!-- ========================================================= -->
+  <div id="modal-confirm" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="washi-panel border border-slate-600 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+      <div class="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      </div>
+      <h4 id="confirm-title" class="text-lg font-black text-white">作品を片付けますか？</h4>
+      <p id="confirm-desc" class="text-xs text-slate-300 leading-relaxed">展示室からこの作品を取り下げます。</p>
+      <div class="flex gap-3 pt-2">
+        <button id="btn-confirm-no" class="tap-btn flex-1 py-3 rounded-2xl bg-slate-800 text-slate-200 font-bold text-sm">やめる</button>
+        <button id="btn-confirm-yes" class="tap-btn flex-1 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">片付ける</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 washi-panel border border-amber-400/70 text-amber-200 px-5 py-2.5 rounded-full text-xs md:text-sm font-bold shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300 text-center max-w-[90vw]">
+    メッセージ
+  </div>
+
+  <!-- 動画フレーム抽出用の非表示ビデオ -->
+  <video id="hidden-video-extractor" playsinline webkit-playsinline muted preload="auto" class="hidden"></video>
+
+  <script>
+    // ==========================================
+    // 1. 折り紙モチーフ定数・インメモリ状態管理
+    // ==========================================
+    const GENRE_PRESETS = [
+      { label: "🐉 ドラゴン", title: "伝説のオリガミ・ドラゴン", tag: "不切正方形一枚折り", colorClass: "bg-rose-500/20 border-rose-400/50 text-rose-200" },
+      { label: "🪲 昆虫", title: "リアルカブトムシ", tag: "沈め折り", colorClass: "bg-amber-500/20 border-amber-400/50 text-amber-200" },
+      { label: "🔮 くす玉", title: "幾何学ユニットくす玉", tag: "ユニット折り紙", colorClass: "bg-purple-500/20 border-purple-400/50 text-purple-200" },
+      { label: "🦖 恐竜", title: "ティラノサウルス", tag: "中割り折り", colorClass: "bg-emerald-500/20 border-emerald-400/50 text-emerald-200" },
+      { label: "🦊 動物", title: "立体アニマル作品", tag: "立体仕上げ", colorClass: "bg-sky-500/20 border-sky-400/50 text-sky-200" },
+      { label: "✨ オリジナル", title: "オリジナル創作作品", tag: "オリジナル創作", colorClass: "bg-pink-500/20 border-pink-400/50 text-pink-200" }
+    ];
+
+    const PAPER_SIZES = ["7.5cm", "15cm", "24cm", "35cm", "30枚組"];
+
+    const TECH_TAGS = [
+      "不切正方形一枚折り", "沈め折り", "中割り折り", "かぶせ折り",
+      "段折り", "蛇腹折り", "花弁折り", "ユニット折り紙", "立体仕上げ", "オリジナル創作"
+    ];
+
+    // サンプルはゼロからスタート（インメモリ管理）
+    let exhibits = [];
+    let currentExhibitIndex = 0;
+
+    // 登録フォーム用の一時データ
+    let capturedFramesBase64 = [];
+    let selectedDifficulty = 4;
+    let selectedPaperSize = "24cm";
+    let selectedTags = new Set();
+    let activeMediaStream = null;
+    let isScanning = false;
+
+    // 編集フォーム用の一時データ
+    let editingExhibitIndex = -1;
+    let editImagesBuffer = [];
+    let editDifficulty = 4;
+    let editPaperSize = "24cm";
+    let editTags = new Set();
+
+    // 収蔵庫フィルター状態
+    let organizeFilter = "all";
+    let pendingDeleteIndex = -1;
+
+    // モーダル表示中の描画最適化フラグ（全モーダルの開閉から一元算出）
+    let isAnyModalOpen = false;
+    function syncModalOpenState() {
+      const modalIds = ["modal-add", "modal-edit", "modal-organize", "modal-confirm"];
+      isAnyModalOpen = modalIds.some(id => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains("hidden");
+      });
+    }
+
+    // ==========================================
+    // 1.5. IndexedDB 永続化ストレージ（iPad大容量保存対応）
+    // ==========================================
+    const OrigamiDB = {
+      dbName: "OrigamiMuseum3D_DB",
+      storeName: "exhibits",
+      version: 1,
+      db: null,
+
+      async init() {
+        if (!window.indexedDB) return false;
+        return new Promise((resolve) => {
+          try {
+            const req = indexedDB.open(this.dbName, this.version);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(this.storeName)) {
+                db.createObjectStore(this.storeName, { keyPath: "id" });
+              }
+            };
+            req.onsuccess = (e) => {
+              this.db = e.target.result;
+              resolve(true);
+            };
+            req.onerror = () => resolve(false);
+          } catch (err) {
+            resolve(false);
+          }
+        });
+      },
+
+      async loadAll() {
+        if (!this.db) return null;
+        return new Promise((resolve) => {
+          try {
+            const tx = this.db.transaction(this.storeName, "readonly");
+            const store = tx.objectStore(this.storeName);
+            const req = store.getAll();
+            req.onsuccess = () => {
+              const items = req.result || [];
+              items.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+              resolve(items);
+            };
+            req.onerror = () => resolve(null);
+          } catch (err) {
+            resolve(null);
+          }
+        });
+      },
+
+      async syncAll(items) {
+        if (!this.db) return;
+        try {
+          const tx = this.db.transaction(this.storeName, "readwrite");
+          const store = tx.objectStore(this.storeName);
+          store.clear();
+          items.forEach((item, index) => {
+            store.put({ ...item, sortOrder: index });
+          });
+        } catch (err) {
+          console.warn("IndexedDB save skipped:", err);
+        }
+      }
+    };
+
+    function persistExhibits() {
+      OrigamiDB.syncAll(exhibits);
+    }
+
+    // ==========================================
+    // 2. Three.js 折り紙＆展開図3Dミュージアム空間
+    // ==========================================
+    const container = document.getElementById("canvas-container");
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0e1017, 0.042);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 2.35, 5.7);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = 2.4;
+    controls.maxDistance = 9.5;
+    controls.maxPolarAngle = Math.PI / 2 + 0.04;
+    controls.target.set(0, 1.2, 0);
+
+    // ライティング
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    scene.add(ambientLight);
+
+    const spotLight = new THREE.SpotLight(0xfff5e4, 2.2);
+    spotLight.position.set(2.5, 6.8, 3.5);
+    spotLight.angle = Math.PI / 4.8;
+    spotLight.penumbra = 0.65;
+    spotLight.castShadow = true;
+    spotLight.shadow.mapSize.width = 1024;
+    spotLight.shadow.mapSize.height = 1024;
+    scene.add(spotLight);
+
+    const rimLight = new THREE.DirectionalLight(0x60a5fa, 0.9);
+    rimLight.position.set(-4, 3, -4);
+    scene.add(rimLight);
+
+    // ------------------------------------------
+    // 折り紙「展開図（Crease Pattern）」フロア生成
+    // ------------------------------------------
+    function createCreasePatternTexture(bgHex, mountainHex, valleyHex, gridHex) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      const cx = 512, cy = 512;
+
+      // 正方形の補助グリッド（蛇腹折りの等分線）
+      ctx.strokeStyle = gridHex;
+      ctx.lineWidth = 1.5;
+      const step = 64;
+      for (let i = 0; i <= 1024; i += step) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, 1024);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(1024, i);
+        ctx.stroke();
+      }
+
+      // 谷折り線（青・点線）：対角線と十字線
+      ctx.save();
+      ctx.strokeStyle = valleyHex;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([12, 10]);
+
+      // 対角線
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(1024, 1024);
+      ctx.moveTo(1024, 0); ctx.lineTo(0, 1024);
+      // 十字線
+      ctx.moveTo(cx, 0); ctx.lineTo(cx, 1024);
+      ctx.moveTo(0, cy); ctx.lineTo(1024, cy);
+      ctx.stroke();
+      ctx.restore();
+
+      // 山折り線（朱色・一点鎖線）：鶴の基本形・魚の基本形の角度線（22.5度系）
+      ctx.save();
+      ctx.strokeStyle = mountainHex;
+      ctx.lineWidth = 3.5;
+      ctx.setLineDash([22, 8, 4, 8]);
+
+      const corners = [[0, 0], [1024, 0], [1024, 1024], [0, 1024]];
+      corners.forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(cx, y === 0 ? cy * 0.58 : cy * 1.42);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x === 0 ? cx * 0.58 : cx * 1.42, cy);
+        ctx.stroke();
+      });
+
+      // 中央のひし形展開図
+      ctx.beginPath();
+      ctx.moveTo(cx, 160);
+      ctx.lineTo(864, cy);
+      ctx.lineTo(cx, 864);
+      ctx.lineTo(160, cy);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    const floorMat = new THREE.MeshStandardMaterial({
+      map: createCreasePatternTexture("#101420", "rgba(244,63,94,0.55)", "rgba(59,130,246,0.55)", "rgba(255,255,255,0.04)"),
+      roughness: 0.35,
+      metalness: 0.25
+    });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(16, 64), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // 展示台（八角形折り紙ポリゴン台座）
+    const pedestalGroup = new THREE.Group();
+    scene.add(pedestalGroup);
+
+    const baseOctagon = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.18, 1.38, 0.68, 8),
+      new THREE.MeshStandardMaterial({ color: 0x1b2132, roughness: 0.35, metalness: 0.45, flatShading: true })
+    );
+    baseOctagon.position.y = 0.34;
+    baseOctagon.receiveShadow = true;
+    baseOctagon.castShadow = true;
+    pedestalGroup.add(baseOctagon);
+
+    const goldTrim = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.2, 1.2, 0.045, 8),
+      new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.2, metalness: 0.85, flatShading: true })
+    );
+    goldTrim.position.y = 0.68;
+    pedestalGroup.add(goldTrim);
+
+    const washiStageTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.14, 1.14, 0.03, 8),
+      new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.3 })
+    );
+    washiStageTop.position.y = 0.71;
+    pedestalGroup.add(washiStageTop);
+
+    const artworkStage = new THREE.Group();
+    artworkStage.position.y = 1.52;
+    scene.add(artworkStage);
+
+    // 舞い散る色紙パーティクル（三角ポリゴン紙片）
+    const confettiGroup = new THREE.Group();
+    const confettiColors = [0xf43f5e, 0xfbbf24, 0x3b82f6, 0x10b981, 0xa855f7];
+    const confettiGeo = new THREE.BufferGeometry();
+    confettiGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      0, 0.06, 0,  -0.05, -0.04, 0.02,  0.05, -0.04, -0.02
+    ]), 3));
+    confettiGeo.computeVertexNormals();
+
+    for (let i = 0; i < 42; i++) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: confettiColors[i % confettiColors.length],
+        side: THREE.DoubleSide,
+        roughness: 0.4,
+        metalness: 0.2
+      });
+      const piece = new THREE.Mesh(confettiGeo, mat);
+      piece.position.set(
+        (Math.random() - 0.5) * 9,
+        Math.random() * 4.5 + 0.5,
+        (Math.random() - 0.5) * 9
+      );
+      piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      piece.userData = {
+        speedY: 0.003 + Math.random() * 0.004,
+        rotSpeed: 0.01 + Math.random() * 0.02,
+        phase: Math.random() * Math.PI * 2
+      };
+      confettiGroup.add(piece);
+    }
+    scene.add(confettiGroup);
+
+    // 3つの折り紙展示室テーマ切替
+    const themes = [
+      {
+        name: "漆黒×金箔",
+        bg: 0x0e1017, fog: 0x0e1017, spot: 0xfff5e4, rim: 0x60a5fa, ambient: 0.55,
+        cpBg: "#101420", cpMtn: "rgba(244,63,94,0.55)", cpVal: "rgba(59,130,246,0.55)", cpGrid: "rgba(255,255,255,0.04)"
+      },
+      {
+        name: "和紙×藍染",
+        bg: 0x141e30, fog: 0x141e30, spot: 0xffedd5, rim: 0x38bdf8, ambient: 0.65,
+        cpBg: "#18263d", cpMtn: "rgba(251,191,36,0.55)", cpVal: "rgba(125,211,252,0.55)", cpGrid: "rgba(255,255,255,0.06)"
+      },
+      {
+        name: "色紙アトリエ",
+        bg: 0xe2e8f0, fog: 0xe2e8f0, spot: 0xffffff, rim: 0x93c5fd, ambient: 0.9,
+        cpBg: "#f8fafc", cpMtn: "rgba(225,29,72,0.45)", cpVal: "rgba(37,99,235,0.45)", cpGrid: "rgba(15,23,42,0.06)"
+      }
+    ];
+    let currentThemeIdx = 0;
+
+    document.getElementById("btn-theme").addEventListener("click", () => {
+      currentThemeIdx = (currentThemeIdx + 1) % themes.length;
+      const t = themes[currentThemeIdx];
+      scene.background = new THREE.Color(t.bg);
+      scene.fog.color.setHex(t.fog);
+      spotLight.color.setHex(t.spot);
+      rimLight.color.setHex(t.rim);
+      ambientLight.intensity = t.ambient;
+
+      if (floorMat.map) floorMat.map.dispose();
+      floorMat.map = createCreasePatternTexture(t.cpBg, t.cpMtn, t.cpVal, t.cpGrid);
+      floorMat.needsUpdate = true;
+
+      document.getElementById("theme-label").textContent = t.name;
+      showToast(`展示室を「${t.name}」に切り替えました`);
+    });
+
+    // 自動回転
+    let autoRotate = true;
+    const btnAutoRotate = document.getElementById("btn-autorotate");
+    const iconRotate = document.getElementById("icon-rotate");
+    btnAutoRotate.addEventListener("click", () => {
+      autoRotate = !autoRotate;
+      if (autoRotate) {
+        btnAutoRotate.classList.add("text-amber-300");
+        btnAutoRotate.classList.remove("text-slate-400");
+        iconRotate.classList.add("animate-spin");
+        showToast("自動回転：ON");
+      } else {
+        btnAutoRotate.classList.remove("text-amber-300");
+        btnAutoRotate.classList.add("text-slate-400");
+        iconRotate.classList.remove("animate-spin");
+        showToast("自動回転：OFF（指で自由に回せます）");
+      }
+    });
+
+    // カメラ視点リセット（正面にもどす）
+    document.getElementById("btn-reset-view").addEventListener("click", () => {
+      camera.position.set(0, 2.35, 5.7);
+      controls.target.set(0, 1.2, 0);
+      artworkStage.rotation.set(0, 0, 0);
+      artworkStage.userData.virtualRot = 0;
+      controls.update();
+      showToast("正面の視点にもどしました");
+    });
+
+    // ==========================================
+    // 3. 0作品時の象徴オブジェ「黄金の光の折り鶴」
+    // ==========================================
+    function buildGoldenOrizuru() {
+      const group = new THREE.Group();
+      const goldMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        emissive: 0xb45309,
+        emissiveIntensity: 0.25,
+        roughness: 0.25,
+        metalness: 0.85,
+        flatShading: true,
+        side: THREE.DoubleSide
+      });
+      const innerGoldMat = new THREE.MeshStandardMaterial({
+        color: 0xfef08a,
+        roughness: 0.35,
+        metalness: 0.6,
+        flatShading: true,
+        side: THREE.DoubleSide
+      });
+
+      // 胴体ピラミッド（折り鶴の背中）
+      const bodyGeo = new THREE.ConeGeometry(0.32, 0.65, 4);
+      bodyGeo.rotateY(Math.PI / 4);
+      const body = new THREE.Mesh(bodyGeo, goldMat);
+      body.position.y = 0.1;
+      body.castShadow = true;
+      group.add(body);
+
+      // 左右の翼（大きく広げた三角形ポリゴン）
+      for (let side of [-1, 1]) {
+        const wingGeo = new THREE.BufferGeometry();
+        wingGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+          0, 0.05, 0.18,
+          side * 1.15, 0.55, 0.0,
+          0, 0.05, -0.22
+        ]), 3));
+        wingGeo.computeVertexNormals();
+        const wing = new THREE.Mesh(wingGeo, innerGoldMat);
+        wing.castShadow = true;
+        group.add(wing);
+      }
+
+      // 首と頭
+      const neckGeo = new THREE.BufferGeometry();
+      neckGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, -0.05, 0.22,
+        0, 0.72, 0.48,
+        0.07, 0.05, 0.12
+      ]), 3));
+      neckGeo.computeVertexNormals();
+      const neck1 = new THREE.Mesh(neckGeo, goldMat);
+
+      const neckGeo2 = new THREE.BufferGeometry();
+      neckGeo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, -0.05, 0.22,
+        0, 0.72, 0.48,
+        -0.07, 0.05, 0.12
+      ]), 3));
+      neckGeo2.computeVertexNormals();
+      const neck2 = new THREE.Mesh(neckGeo2, goldMat);
+
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.26, 4), goldMat);
+      head.position.set(0, 0.68, 0.58);
+      head.rotation.x = Math.PI / 1.65;
+      group.add(neck1, neck2, head);
+
+      // 尾
+      const tailGeo = new THREE.BufferGeometry();
+      tailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, -0.05, -0.22,
+        0, 0.78, -0.52,
+        0.07, 0.05, -0.12
+      ]), 3));
+      tailGeo.computeVertexNormals();
+      const tail1 = new THREE.Mesh(tailGeo, goldMat);
+
+      const tailGeo2 = new THREE.BufferGeometry();
+      tailGeo2.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+        0, -0.05, -0.22,
+        0, 0.78, -0.52,
+        -0.07, 0.05, -0.12
+      ]), 3));
+      tailGeo2.computeVertexNormals();
+      const tail2 = new THREE.Mesh(tailGeo2, goldMat);
+
+      group.add(tail1, tail2);
+      group.position.y = 0.22;
+      return group;
+    }
+
+    // ==========================================
+    // 4. 3D作品パネル＆360度ターンテーブル生成
+    // ==========================================
+    let activeTurnTableData = null;
+
+    // 1枚写真展示時の裏面用「和紙・麻の葉紋様」テクスチャ生成
+    function createWashiBackTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext("2d");
+
+      // 深い藍色ベース
+      ctx.fillStyle = "#162033";
+      ctx.fillRect(0, 0, 512, 512);
+
+      // 金箔の二重枠線
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 8;
+      ctx.strokeRect(24, 24, 464, 464);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(38, 38, 436, 436);
+
+      // 中央に折り鶴の幾何学シンボル
+      ctx.fillStyle = "rgba(251, 191, 36, 0.22)";
+      ctx.beginPath();
+      ctx.moveTo(256, 110);
+      ctx.lineTo(320, 230);
+      ctx.lineTo(256, 270);
+      ctx.lineTo(192, 230);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(110, 200);
+      ctx.lineTo(256, 270);
+      ctx.lineTo(205, 310);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(402, 200);
+      ctx.lineTo(256, 270);
+      ctx.lineTo(307, 310);
+      ctx.closePath();
+      ctx.fill();
+
+      // ラベル文字
+      ctx.fillStyle = "#fde68a";
+      ctx.font = "bold 24px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("3D ORIGAMI MUSEUM", 256, 375);
+      ctx.fillStyle = "rgba(253, 230, 138, 0.65)";
+      ctx.font = "16px sans-serif";
+      ctx.fillText("ARCHIVED ARTWORK", 256, 405);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    const washiBackTex = createWashiBackTexture();
+
+    function createDataUrlTexture(dataUrl) {
+      const img = new Image();
+      const tex = new THREE.Texture(img);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      img.onload = () => {
+        tex.needsUpdate = true;
+      };
+      img.src = dataUrl;
+      return tex;
+    }
+
+    function buildPhotoArtwork(item) {
+      const group = new THREE.Group();
+      const images = Array.isArray(item.images) && item.images.length > 0 ? item.images : [];
+      const textures = images.map(src => createDataUrlTexture(src));
+      const isSingleImage = textures.length <= 1;
+
+      const panelSize = 1.62;
+      const frameThickness = 0.06;
+
+      // 金箔フレーム縁取り
+      const frameGeo = new THREE.BoxGeometry(panelSize + 0.1, panelSize + 0.1, frameThickness);
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        roughness: 0.25,
+        metalness: 0.8
+      });
+      const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+      frameMesh.castShadow = true;
+      frameMesh.receiveShadow = true;
+      group.add(frameMesh);
+
+      // 正面パネル（作品写真）
+      const frontGeo = new THREE.PlaneGeometry(panelSize, panelSize);
+      const frontMat = new THREE.MeshBasicMaterial({
+        map: textures[0] || null,
+        side: THREE.FrontSide
+      });
+      const frontMesh = new THREE.Mesh(frontGeo, frontMat);
+      frontMesh.position.z = frameThickness / 2 + 0.002;
+      group.add(frontMesh);
+
+      // 裏面パネル（1枚写真時は和紙紋様プレート）
+      const backGeo = new THREE.PlaneGeometry(panelSize, panelSize);
+      const backMat = new THREE.MeshStandardMaterial({
+        map: isSingleImage ? washiBackTex : (textures[0] || washiBackTex),
+        roughness: 0.45,
+        metalness: 0.2,
+        side: THREE.FrontSide
+      });
+      const backMesh = new THREE.Mesh(backGeo, backMat);
+      backMesh.rotation.y = Math.PI;
+      backMesh.position.z = -(frameThickness / 2 + 0.002);
+      group.add(backMesh);
+
+      group.position.y = 0.12;
+
+      activeTurnTableData = {
+        group,
+        textures,
+        panelMat: frontMat,
+        isSingleImage,
+        lastIdx: 0
+      };
+
+      return group;
+    }
+
+    // ==========================================
+    // 5. コレクション管理＆画面表示更新（GPUメモリ確実解放付き）
+    // ==========================================
+    function clearArtworkStage() {
+      if (activeTurnTableData && Array.isArray(activeTurnTableData.textures)) {
+        activeTurnTableData.textures.forEach(tex => {
+          if (tex && typeof tex.dispose === "function") tex.dispose();
+        });
+      }
+      activeTurnTableData = null;
+
+      while (artworkStage.children.length > 0) {
+        const obj = artworkStage.children[0];
+        obj.traverse((child) => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(m => {
+              if (m.map && m.map !== washiBackTex) m.map.dispose();
+              m.dispose();
+            });
+          }
+        });
+        artworkStage.remove(obj);
+      }
+      artworkStage.rotation.set(0, 0, 0);
+      artworkStage.userData.virtualRot = 0;
+    }
+
+    function refreshMuseumUI() {
+      const count = exhibits.length;
+      document.getElementById("badge-total-count").textContent = count;
+
+      // 館長ランク更新
+      const rankEl = document.getElementById("curator-rank");
+      if (count === 0) {
+        rankEl.textContent = "館長Lv.1 はじまりの展示室";
+      } else if (count < 3) {
+        rankEl.textContent = `館長Lv.2 折り紙コレクター (${count}作品)`;
+      } else if (count < 6) {
+        rankEl.textContent = `館長Lv.3 折り紙マイスター (${count}作品)`;
+      } else {
+        rankEl.textContent = `館長Lv.MAX 伝説のミュージアム館長 (${count}作品)`;
+      }
+
+      const emptyCard = document.getElementById("empty-state-card");
+      const captionCard = document.getElementById("caption-card");
+      const dockFooter = document.getElementById("dock-footer");
+
+      if (count === 0) {
+        emptyCard.classList.remove("hidden");
+        captionCard.classList.add("hidden");
+        dockFooter.classList.add("hidden");
+        dockFooter.classList.remove("flex");
+        showEmptyOrizuruStage();
+      } else {
+        emptyCard.classList.add("hidden");
+        captionCard.classList.remove("hidden");
+        dockFooter.classList.remove("hidden");
+        dockFooter.classList.add("flex");
+
+        if (currentExhibitIndex >= count) {
+          currentExhibitIndex = count - 1;
+        }
+        selectExhibit(currentExhibitIndex);
+      }
+    }
+
+    function showEmptyOrizuruStage() {
+      clearArtworkStage();
+      artworkStage.add(buildGoldenOrizuru());
+    }
+
+    function selectExhibit(index) {
+      if (index < 0 || index >= exhibits.length) return;
+      currentExhibitIndex = index;
+      const item = exhibits[index];
+
+      clearArtworkStage();
+      artworkStage.add(buildPhotoArtwork(item));
+
+      document.getElementById("art-number").textContent = `No.${String(index + 1).padStart(3, "0")}`;
+      document.getElementById("art-stars").textContent = "★".repeat(item.difficulty) + "☆".repeat(5 - item.difficulty);
+      document.getElementById("art-title").textContent = item.title;
+      document.getElementById("art-paper").textContent = item.paperSize || "24cm";
+      document.getElementById("art-meta").textContent = item.dateStr || "今日";
+      document.getElementById("art-notes").textContent = item.notes || "自慢の折り紙作品です！";
+
+      // お気に入りボタン状態
+      const favBtn = document.getElementById("btn-toggle-fav");
+      const favIcon = document.getElementById("fav-icon");
+      if (item.isFavorite) {
+        favBtn.classList.add("bg-amber-500/25", "border-amber-400", "text-amber-300");
+        favBtn.classList.remove("bg-slate-800/80", "border-slate-700", "text-slate-400");
+        favIcon.textContent = "👑";
+      } else {
+        favBtn.classList.remove("bg-amber-500/25", "border-amber-400", "text-amber-300");
+        favBtn.classList.add("bg-slate-800/80", "border-slate-700", "text-slate-400");
+        favIcon.textContent = "☆";
+      }
+
+      // タグ一覧
+      const tagsContainer = document.getElementById("art-tags");
+      tagsContainer.innerHTML = "";
+      (item.tags || []).forEach(tag => {
+        const span = document.createElement("span");
+        span.className = "text-[11px] bg-amber-500/20 text-amber-200 border border-amber-400/35 px-2 py-0.5 rounded-lg font-bold";
+        span.textContent = `#${tag}`;
+        tagsContainer.appendChild(span);
+      });
+
+      // アングル表示
+      const angleInd = document.getElementById("angle-indicator");
+      if (item.images.length > 1) {
+        angleInd.classList.remove("invisible");
+        document.getElementById("angle-step-text").textContent = `1 / ${item.images.length}`;
+      } else {
+        angleInd.classList.add("invisible");
+      }
+
+      renderGalleryDock();
+    }
+
+    function renderGalleryDock() {
+      const dock = document.getElementById("gallery-dock");
+      dock.innerHTML = "";
+
+      exhibits.forEach((item, idx) => {
+        const isSelected = idx === currentExhibitIndex;
+        const btn = document.createElement("button");
+        btn.className = `tap-btn flex items-center gap-2.5 px-3 py-2 rounded-2xl shrink-0 border relative ${
+          isSelected
+            ? "bg-amber-500/25 border-amber-400 text-white shadow-lg"
+            : "bg-slate-900/85 border-slate-700/80 text-slate-300 hover:text-white"
+        }`;
+
+        const favBadge = item.isFavorite
+          ? `<span class="absolute -top-1.5 -right-1.5 text-xs bg-slate-950 rounded-full px-1 border border-amber-400">👑</span>`
+          : "";
+
+        btn.innerHTML = `
+          ${favBadge}
+          <img src="${item.images[0]}" class="w-10 h-10 rounded-xl object-cover border border-white/25" />
+          <div class="text-left max-w-[130px]">
+            <div class="text-xs font-bold truncate">${escapeHtml(item.title)}</div>
+            <div class="text-[10px] text-amber-400">${"★".repeat(item.difficulty)}</div>
+          </div>
+        `;
+        btn.addEventListener("click", () => selectExhibit(idx));
+        dock.appendChild(btn);
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // お気に入りトグル
+    document.getElementById("btn-toggle-fav").addEventListener("click", () => {
+      if (exhibits.length === 0) return;
+      const item = exhibits[currentExhibitIndex];
+      item.isFavorite = !item.isFavorite;
+      persistExhibits();
+      selectExhibit(currentExhibitIndex);
+      showToast(item.isFavorite ? `👑 「${item.title}」をお気に入りに登録しました！` : "お気に入りを解除しました");
+    });
+
+    // キャプション折りたたみ
+    let captionOpen = true;
+    document.getElementById("btn-toggle-caption").addEventListener("click", () => {
+      captionOpen = !captionOpen;
+      const body = document.getElementById("caption-body");
+      const icon = document.getElementById("chevron-icon");
+      body.classList.toggle("hidden", !captionOpen);
+      icon.style.transform = captionOpen ? "rotate(0deg)" : "rotate(180deg)";
+    });
+
+    // 削除確認ダイアログ
+    const modalConfirm = document.getElementById("modal-confirm");
+    function requestDeleteExhibit(index) {
+      if (index < 0 || index >= exhibits.length) return;
+      pendingDeleteIndex = index;
+      const item = exhibits[index];
+      document.getElementById("confirm-title").textContent = `「${item.title}」を片付けますか？`;
+      modalConfirm.classList.remove("hidden");
+      modalConfirm.classList.add("flex");
+      syncModalOpenState();
+    }
+
+    document.getElementById("btn-delete-art").addEventListener("click", () => {
+      requestDeleteExhibit(currentExhibitIndex);
+    });
+
+    document.getElementById("btn-confirm-no").addEventListener("click", () => {
+      pendingDeleteIndex = -1;
+      modalConfirm.classList.add("hidden");
+      modalConfirm.classList.remove("flex");
+      syncModalOpenState();
+    });
+
+    document.getElementById("btn-confirm-yes").addEventListener("click", () => {
+      modalConfirm.classList.add("hidden");
+      modalConfirm.classList.remove("flex");
+      syncModalOpenState();
+      if (pendingDeleteIndex >= 0 && pendingDeleteIndex < exhibits.length) {
+        exhibits.splice(pendingDeleteIndex, 1);
+        pendingDeleteIndex = -1;
+        persistExhibits();
+        refreshMuseumUI();
+        if (!document.getElementById("modal-organize").classList.contains("hidden")) {
+          renderOrganizeGrid();
+        }
+        showToast("作品を展示室から片付けました");
+      }
+    });
+
+    // ==========================================
+    // 6. iPadかんたん動画・カメラ登録システム
+    // ==========================================
+    const modalAdd = document.getElementById("modal-add");
+    const captureChoiceBox = document.getElementById("capture-choice-box");
+    const liveCamBox = document.getElementById("live-cam-box");
+    const videoProcessingBox = document.getElementById("video-processing-box");
+    const extractedPreviewBox = document.getElementById("extracted-preview-box");
+    const captureStatusBadge = document.getElementById("capture-status-badge");
+
+    function initOneTapFormControls() {
+      // 1. 色紙カラー・ジャンルボタン（登録用）
+      const genreContainer = document.getElementById("preset-genre-buttons");
+      GENRE_PRESETS.forEach(preset => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `tap-btn px-3 py-2 rounded-xl border text-xs font-bold ${preset.colorClass}`;
+        btn.textContent = preset.label;
+        btn.addEventListener("click", () => {
+          document.getElementById("input-title").value = preset.title;
+          if (preset.tag) {
+            selectedTags.add(preset.tag);
+            refreshTagButtons();
+          }
+          showToast(`「${preset.title}」をセットしました！`);
+        });
+        genreContainer.appendChild(btn);
+      });
+
+      // 2. 星セレクター（登録用 & 編集用）
+      const starContainer = document.getElementById("star-selector");
+      const editStarContainer = document.getElementById("edit-star-selector");
+      for (let s = 1; s <= 5; s++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.star = s;
+        btn.className = "tap-btn text-2xl p-1 leading-none cursor-pointer";
+        btn.textContent = "★";
+        btn.addEventListener("click", () => {
+          selectedDifficulty = s;
+          refreshStarButtons();
+        });
+        starContainer.appendChild(btn);
+
+        const eBtn = document.createElement("button");
+        eBtn.type = "button";
+        eBtn.dataset.star = s;
+        eBtn.className = "tap-btn text-2xl p-1 leading-none cursor-pointer";
+        eBtn.textContent = "★";
+        eBtn.addEventListener("click", () => {
+          editDifficulty = s;
+          refreshEditStarButtons();
+        });
+        editStarContainer.appendChild(eBtn);
+      }
+      refreshStarButtons();
+
+      // 3. 紙サイズボタン（登録用 & 編集用）
+      const sizeContainer = document.getElementById("paper-size-buttons");
+      const editSizeContainer = document.getElementById("edit-paper-size-buttons");
+      PAPER_SIZES.forEach(size => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.size = size;
+        btn.className = "tap-btn py-2.5 px-1 rounded-xl border text-[11px] font-bold text-center cursor-pointer";
+        btn.textContent = size;
+        btn.addEventListener("click", () => {
+          selectedPaperSize = size;
+          refreshPaperSizeButtons();
+        });
+        sizeContainer.appendChild(btn);
+
+        const eBtn = document.createElement("button");
+        eBtn.type = "button";
+        eBtn.dataset.size = size;
+        eBtn.className = "tap-btn py-2.5 px-1 rounded-xl border text-[11px] font-bold text-center cursor-pointer";
+        eBtn.textContent = size;
+        eBtn.addEventListener("click", () => {
+          editPaperSize = size;
+          refreshEditPaperSizeButtons();
+        });
+        editSizeContainer.appendChild(eBtn);
+      });
+      refreshPaperSizeButtons();
+
+      // 4. 技タグボタン（登録用 & 編集用）
+      const tagContainer = document.getElementById("tech-tag-selector");
+      const editTagContainer = document.getElementById("edit-tech-tag-selector");
+      TECH_TAGS.forEach(tag => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.tag = tag;
+        btn.textContent = `#${tag}`;
+        btn.className = "tap-btn text-xs px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 font-medium";
+        btn.addEventListener("click", () => {
+          if (selectedTags.has(tag)) selectedTags.delete(tag);
+          else selectedTags.add(tag);
+          refreshTagButtons();
+        });
+        tagContainer.appendChild(btn);
+
+        const eBtn = document.createElement("button");
+        eBtn.type = "button";
+        eBtn.dataset.tag = tag;
+        eBtn.textContent = `#${tag}`;
+        eBtn.className = "tap-btn text-xs px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 font-medium";
+        eBtn.addEventListener("click", () => {
+          if (editTags.has(tag)) editTags.delete(tag);
+          else editTags.add(tag);
+          refreshEditTagButtons();
+        });
+        editTagContainer.appendChild(eBtn);
+      });
+    }
+
+    function refreshStarButtons() {
+      document.querySelectorAll("#star-selector button").forEach(btn => {
+        const val = parseInt(btn.dataset.star, 10);
+        btn.classList.toggle("text-amber-400", val <= selectedDifficulty);
+        btn.classList.toggle("text-slate-600", val > selectedDifficulty);
+      });
+    }
+    function refreshPaperSizeButtons() {
+      document.querySelectorAll("#paper-size-buttons button").forEach(btn => {
+        const active = btn.dataset.size === selectedPaperSize;
+        btn.className = `tap-btn py-2.5 px-1 rounded-xl border text-[11px] font-bold text-center cursor-pointer ${
+          active ? "bg-amber-500/25 border-amber-400 text-amber-200" : "bg-slate-950 border-slate-700 text-slate-400"
+        }`;
+      });
+    }
+    function refreshTagButtons() {
+      document.querySelectorAll("#tech-tag-selector button").forEach(btn => {
+        const active = selectedTags.has(btn.dataset.tag);
+        btn.className = `tap-btn text-xs px-3 py-2 rounded-xl border font-bold ${
+          active ? "bg-amber-500/25 border-amber-400 text-amber-200" : "border-slate-700 bg-slate-950 text-slate-300 font-medium"
+        }`;
+      });
+    }
+
+    function stopCameraStream() {
+      isScanning = false;
+      if (activeMediaStream) {
+        activeMediaStream.getTracks().forEach(track => {
+          try { track.stop(); } catch (e) {}
+        });
+        activeMediaStream = null;
+      }
+      const videoEl = document.getElementById("live-video");
+      if (videoEl) {
+        videoEl.srcObject = null;
+      }
+    }
+
+    function updateSubmitButtonReadyState(isReady) {
+      const btn = document.getElementById("btn-submit-art");
+      if (!btn) return;
+      if (isReady) {
+        btn.className = "tap-btn btn-origami-gold px-7 py-3.5 rounded-2xl text-base cursor-pointer shadow-xl transition-all";
+        btn.textContent = "✨ ミュージアムに展示する！";
+      } else {
+        btn.className = "tap-btn px-7 py-3.5 rounded-2xl text-base cursor-pointer bg-slate-800 border border-slate-600 text-slate-400 font-bold transition-all";
+        btn.textContent = "📸 まずステップ1で撮影してね";
+      }
+    }
+
+    function resetCaptureUI() {
+      stopCameraStream();
+      capturedFramesBase64 = [];
+      updateSubmitButtonReadyState(false);
+      captureChoiceBox.classList.remove("hidden");
+      liveCamBox.classList.add("hidden");
+      liveCamBox.classList.remove("flex");
+      videoProcessingBox.classList.add("hidden");
+      videoProcessingBox.classList.remove("flex");
+      extractedPreviewBox.classList.add("hidden");
+      captureStatusBadge.classList.add("hidden");
+      document.getElementById("rec-progress-wrap").classList.add("hidden");
+      document.getElementById("rec-progress-bar").style.width = "0%";
+    }
+
+    function openAddModal() {
+      resetCaptureUI();
+      modalAdd.classList.remove("hidden");
+      modalAdd.classList.add("flex");
+      syncModalOpenState();
+    }
+
+    function closeAddModal() {
+      stopCameraStream();
+      modalAdd.classList.add("hidden");
+      modalAdd.classList.remove("flex");
+      syncModalOpenState();
+    }
+
+    document.getElementById("btn-open-modal").addEventListener("click", openAddModal);
+    document.getElementById("btn-empty-start").addEventListener("click", openAddModal);
+    document.getElementById("btn-close-modal").addEventListener("click", closeAddModal);
+    document.getElementById("btn-cancel-modal").addEventListener("click", closeAddModal);
+    document.getElementById("btn-retake").addEventListener("click", resetCaptureUI);
+
+    // 方法A：カメラで5秒間ぐるっとスキャン
+    document.getElementById("btn-start-live-cam").addEventListener("click", async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("カメラが直接起動できない環境です。「動画・写真からえらぶ」を使ってね！");
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 720 }, height: { ideal: 720 } },
+          audio: false
+        });
+        activeMediaStream = stream;
+        const videoEl = document.getElementById("live-video");
+        videoEl.srcObject = stream;
+        await videoEl.play();
+
+        captureChoiceBox.classList.add("hidden");
+        liveCamBox.classList.remove("hidden");
+        liveCamBox.classList.add("flex");
+        document.getElementById("cam-counter-badge").textContent = "READY";
+        document.getElementById("cam-guide-text").textContent = "作品を真ん中に入れてね";
+        document.getElementById("btn-scan-label").textContent = "スキャン開始（5秒）";
+      } catch (err) {
+        showToast("カメラ許可がオフになっています。「動画・写真からえらぶ」からも登録できるよ！");
+      }
+    });
+
+    document.getElementById("btn-cancel-cam").addEventListener("click", resetCaptureUI);
+
+    document.getElementById("btn-trigger-scan").addEventListener("click", () => {
+      if (isScanning) return;
+      isScanning = true;
+
+      const videoEl = document.getElementById("live-video");
+      const progressWrap = document.getElementById("rec-progress-wrap");
+      const progressBar = document.getElementById("rec-progress-bar");
+      const counterBadge = document.getElementById("cam-counter-badge");
+      const guideText = document.getElementById("cam-guide-text");
+      const scanLabel = document.getElementById("btn-scan-label");
+
+      progressWrap.classList.remove("hidden");
+      guideText.textContent = "ゆっくり作品のまわりを1周してね！";
+      scanLabel.textContent = "スキャン中...";
+
+      const totalFrames = 14;
+      const durationMs = 4800;
+      const intervalMs = durationMs / totalFrames;
+      const frames = [];
+
+      const capCanvas = document.createElement("canvas");
+      capCanvas.width = 512;
+      capCanvas.height = 512;
+      const ctx = capCanvas.getContext("2d");
+
+      let count = 0;
+      const timer = setInterval(() => {
+        if (!isScanning) {
+          clearInterval(timer);
+          return;
+        }
+        const vw = videoEl.videoWidth || 512;
+        const vh = videoEl.videoHeight || 512;
+        const sSize = Math.min(vw, vh);
+        const sx = (vw - sSize) / 2;
+        const sy = (vh - sSize) / 2;
+        ctx.drawImage(videoEl, sx, sy, sSize, sSize, 0, 0, 512, 512);
+        frames.push(capCanvas.toDataURL("image/jpeg", 0.8));
+
+        count++;
+        const pct = Math.round((count / totalFrames) * 100);
+        progressBar.style.width = `${pct}%`;
+        counterBadge.textContent = `${count} / ${totalFrames}`;
+
+        if (count >= totalFrames) {
+          clearInterval(timer);
+          stopCameraStream();
+          finishCaptureWithFrames(frames);
+        }
+      }, intervalMs);
+    });
+
+    // 方法B：動画ファイル or 写真ファイルから抽出
+    document.getElementById("input-media-file").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      const firstFile = files[0];
+      if (firstFile.type.startsWith("video/")) {
+        captureChoiceBox.classList.add("hidden");
+        videoProcessingBox.classList.remove("hidden");
+        videoProcessingBox.classList.add("flex");
+
+        try {
+          const frames = await extractFramesFromVideo(firstFile, 14);
+          videoProcessingBox.classList.add("hidden");
+          videoProcessingBox.classList.remove("flex");
+          finishCaptureWithFrames(frames);
+        } catch (err) {
+          resetCaptureUI();
+          showToast("動画の読み込みに失敗しました。別の動画か写真でためしてみてね！");
+        }
+      } else {
+        captureChoiceBox.classList.add("hidden");
+        videoProcessingBox.classList.remove("hidden");
+        videoProcessingBox.classList.add("flex");
+        document.getElementById("video-progress-text").textContent = "写真を最適化しています...";
+
+        const frames = [];
+        for (const f of files.slice(0, 16)) {
+          if (f.type.startsWith("image/")) {
+            frames.push(await compressImageFile(f));
+          }
+        }
+        videoProcessingBox.classList.add("hidden");
+        videoProcessingBox.classList.remove("flex");
+        if (frames.length > 0) {
+          finishCaptureWithFrames(frames);
+        } else {
+          resetCaptureUI();
+        }
+      }
+      e.target.value = "";
+    });
+
+    // iPad Safariでもハングしない安全タイムアウト付き動画フレーム抽出
+    function extractFramesFromVideo(videoFile, targetCount) {
+      return new Promise((resolve, reject) => {
+        const video = document.getElementById("hidden-video-extractor");
+        const url = URL.createObjectURL(videoFile);
+        video.src = url;
+        video.load();
+
+        const canvas = document.createElement("canvas");
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext("2d");
+
+        video.onloadedmetadata = async () => {
+          const duration = video.duration;
+          if (!duration || isNaN(duration) || duration <= 0) {
+            URL.revokeObjectURL(url);
+            reject(new Error("Invalid video duration"));
+            return;
+          }
+
+          const frames = [];
+          const actualCount = Math.min(targetCount, Math.max(4, Math.floor(duration * 3)));
+          const step = duration / actualCount;
+
+          for (let i = 0; i < actualCount; i++) {
+            const seekTime = Math.min(duration - 0.05, i * step + 0.05);
+            document.getElementById("video-progress-text").textContent = `アングル抽出中 (${i + 1} / ${actualCount})`;
+
+            await new Promise(res => {
+              let settled = false;
+              const captureCurrent = () => {
+                if (settled) return;
+                settled = true;
+                video.removeEventListener("seeked", onSeeked);
+                const vw = video.videoWidth || 512;
+                const vh = video.videoHeight || 512;
+                const sSize = Math.min(vw, vh);
+                const sx = (vw - sSize) / 2;
+                const sy = (vh - sSize) / 2;
+                ctx.drawImage(video, sx, sy, sSize, sSize, 0, 0, 512, 512);
+                frames.push(canvas.toDataURL("image/jpeg", 0.8));
+                res();
+              };
+              const onSeeked = () => captureCurrent();
+              video.addEventListener("seeked", onSeeked);
+              video.currentTime = seekTime;
+              // 万が一seekedが発火しないコーデック用の安全フォールバック
+              setTimeout(captureCurrent, 650);
+            });
+          }
+
+          URL.revokeObjectURL(url);
+          resolve(frames);
+        };
+
+        video.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Video load error"));
+        };
+      });
+    }
+
+    function compressImageFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 560;
+            canvas.height = 560;
+            const ctx = canvas.getContext("2d");
+            const sSize = Math.min(img.width, img.height);
+            const sx = (img.width - sSize) / 2;
+            const sy = (img.height - sSize) / 2;
+            ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, 560, 560);
+            resolve(canvas.toDataURL("image/jpeg", 0.84));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function finishCaptureWithFrames(frames) {
+      capturedFramesBase64 = frames;
+      updateSubmitButtonReadyState(true);
+      liveCamBox.classList.add("hidden");
+      liveCamBox.classList.remove("flex");
+      extractedPreviewBox.classList.remove("hidden");
+      captureStatusBadge.classList.remove("hidden");
+
+      const slider = document.getElementById("preview-angle-slider");
+      const previewImg = document.getElementById("preview-turntable-img");
+      const angleBadge = document.getElementById("preview-angle-badge");
+
+      slider.max = Math.max(0, frames.length - 1);
+      slider.value = 0;
+      previewImg.src = frames[0];
+      angleBadge.textContent = `1/${frames.length}`;
+      document.getElementById("extracted-count-text").textContent = frames.length;
+
+      slider.oninput = () => {
+        const idx = parseInt(slider.value, 10);
+        previewImg.src = frames[idx];
+        angleBadge.textContent = `${idx + 1}/${frames.length}`;
+      };
+
+      showToast(`✨ ${frames.length}アングルの360°データができました！`);
+    }
+
+    // 新規登録フォーム送信
+    document.getElementById("form-add-art").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (capturedFramesBase64.length === 0) {
+        showToast("📸 まずステップ1で作品の動画や写真をとってね！");
+        return;
+      }
+
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`;
+
+      const newExhibit = {
+        id: "art-" + Date.now(),
+        createdAt: Date.now(),
+        images: [...capturedFramesBase64],
+        title: document.getElementById("input-title").value.trim(),
+        dateStr: dateStr,
+        difficulty: selectedDifficulty,
+        paperSize: selectedPaperSize,
+        tags: Array.from(selectedTags),
+        notes: document.getElementById("input-notes").value.trim(),
+        isFavorite: false
+      };
+
+      exhibits.unshift(newExhibit);
+      currentExhibitIndex = 0;
+      persistExhibits();
+      refreshMuseumUI();
+
+      document.getElementById("form-add-art").reset();
+      selectedTags.clear();
+      refreshTagButtons();
+      closeAddModal();
+      showToast(`🎉 「${newExhibit.title}」を展示＆保存しました！`);
+    });
+
+    // ==========================================
+    // 7. 登録後の編集モーダル（正面アングル調整付き）
+    // ==========================================
+    const modalEdit = document.getElementById("modal-edit");
+
+    function openEditModal(index) {
+      if (index < 0 || index >= exhibits.length) return;
+      editingExhibitIndex = index;
+      const item = exhibits[index];
+
+      editImagesBuffer = [...item.images];
+      editDifficulty = item.difficulty;
+      editPaperSize = item.paperSize || "24cm";
+      editTags = new Set(item.tags || []);
+
+      document.getElementById("edit-title").value = item.title;
+      document.getElementById("edit-notes").value = item.notes || "";
+
+      refreshEditStarButtons();
+      refreshEditPaperSizeButtons();
+      refreshEditTagButtons();
+
+      // 正面アングル調整ボックスの設定
+      const angleBox = document.getElementById("edit-angle-box");
+      const previewImg = document.getElementById("edit-preview-img");
+      const slider = document.getElementById("edit-angle-slider");
+      const angleLabel = document.getElementById("edit-angle-label");
+
+      previewImg.src = editImagesBuffer[0];
+      if (editImagesBuffer.length > 1) {
+        angleBox.classList.remove("hidden");
+        slider.max = editImagesBuffer.length - 1;
+        slider.value = 0;
+        angleLabel.textContent = `1 / ${editImagesBuffer.length}`;
+        slider.oninput = () => {
+          const idx = parseInt(slider.value, 10);
+          previewImg.src = editImagesBuffer[idx];
+          angleLabel.textContent = `${idx + 1} / ${editImagesBuffer.length}`;
+        };
+      } else {
+        angleBox.classList.add("hidden");
+      }
+
+      modalEdit.classList.remove("hidden");
+      modalEdit.classList.add("flex");
+      syncModalOpenState();
+    }
+
+    function closeEditModal() {
+      editingExhibitIndex = -1;
+      modalEdit.classList.add("hidden");
+      modalEdit.classList.remove("flex");
+      syncModalOpenState();
+    }
+
+    // 選択中のアングルを配列の先頭（正面・表紙）にローテーション
+    document.getElementById("btn-set-front-angle").addEventListener("click", () => {
+      const slider = document.getElementById("edit-angle-slider");
+      const chosenIdx = parseInt(slider.value, 10);
+      if (chosenIdx > 0 && chosenIdx < editImagesBuffer.length) {
+        editImagesBuffer = [
+          ...editImagesBuffer.slice(chosenIdx),
+          ...editImagesBuffer.slice(0, chosenIdx)
+        ];
+        slider.value = 0;
+        document.getElementById("edit-preview-img").src = editImagesBuffer[0];
+        document.getElementById("edit-angle-label").textContent = `1 / ${editImagesBuffer.length}`;
+        showToast("✨ この向きを正面（表紙）にセットしました！");
+      } else {
+        showToast("すでにこの向きが正面になっています！");
+      }
+    });
+
+    function refreshEditStarButtons() {
+      document.querySelectorAll("#edit-star-selector button").forEach(btn => {
+        const val = parseInt(btn.dataset.star, 10);
+        btn.classList.toggle("text-amber-400", val <= editDifficulty);
+        btn.classList.toggle("text-slate-600", val > editDifficulty);
+      });
+    }
+    function refreshEditPaperSizeButtons() {
+      document.querySelectorAll("#edit-paper-size-buttons button").forEach(btn => {
+        const active = btn.dataset.size === editPaperSize;
+        btn.className = `tap-btn py-2.5 px-1 rounded-xl border text-[11px] font-bold text-center cursor-pointer ${
+          active ? "bg-sky-500/25 border-sky-400 text-sky-200" : "bg-slate-950 border-slate-700 text-slate-400"
+        }`;
+      });
+    }
+    function refreshEditTagButtons() {
+      document.querySelectorAll("#edit-tech-tag-selector button").forEach(btn => {
+        const active = editTags.has(btn.dataset.tag);
+        btn.className = `tap-btn text-xs px-3 py-2 rounded-xl border font-bold ${
+          active ? "bg-sky-500/25 border-sky-400 text-sky-200" : "border-slate-700 bg-slate-950 text-slate-300 font-medium"
+        }`;
+      });
+    }
+
+    document.getElementById("btn-edit-art").addEventListener("click", () => {
+      openEditModal(currentExhibitIndex);
+    });
+    document.getElementById("btn-close-edit").addEventListener("click", closeEditModal);
+    document.getElementById("btn-cancel-edit").addEventListener("click", closeEditModal);
+
+    document.getElementById("form-edit-art").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (editingExhibitIndex < 0 || editingExhibitIndex >= exhibits.length) return;
+
+      const target = exhibits[editingExhibitIndex];
+      target.title = document.getElementById("edit-title").value.trim();
+      target.difficulty = editDifficulty;
+      target.paperSize = editPaperSize;
+      target.tags = Array.from(editTags);
+      target.notes = document.getElementById("edit-notes").value.trim();
+      target.images = [...editImagesBuffer];
+      persistExhibits();
+
+      const updatedIdx = editingExhibitIndex;
+      closeEditModal();
+      selectExhibit(updatedIdx);
+      if (!document.getElementById("modal-organize").classList.contains("hidden")) {
+        renderOrganizeGrid();
+      }
+      showToast("💾 作品情報を更新しました！");
+    });
+
+    // ==========================================
+    // 8. ミュージアム収蔵庫（整理・一覧・並び替え）
+    // ==========================================
+    const modalOrganize = document.getElementById("modal-organize");
+
+    document.getElementById("btn-open-organize").addEventListener("click", () => {
+      organizeFilter = "all";
+      updateOrganizeFilterTabs();
+      renderOrganizeGrid();
+      modalOrganize.classList.remove("hidden");
+      modalOrganize.classList.add("flex");
+      syncModalOpenState();
+    });
+
+    function closeOrganizeModal() {
+      modalOrganize.classList.add("hidden");
+      modalOrganize.classList.remove("flex");
+      syncModalOpenState();
+    }
+    document.getElementById("btn-close-organize").addEventListener("click", closeOrganizeModal);
+
+    // フィルタータブ切替
+    document.querySelectorAll(".org-filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        organizeFilter = btn.dataset.filter;
+        updateOrganizeFilterTabs();
+        renderOrganizeGrid();
+      });
+    });
+
+    function updateOrganizeFilterTabs() {
+      document.querySelectorAll(".org-filter-btn").forEach(btn => {
+        const active = btn.dataset.filter === organizeFilter;
+        btn.className = `org-filter-btn tap-btn px-3 py-1.5 rounded-xl text-xs font-bold ${
+          active ? "bg-amber-400 text-slate-950" : "bg-slate-800 text-slate-300"
+        }`;
+      });
+    }
+
+    // 一括並び替えボタン
+    document.getElementById("btn-sort-newest").addEventListener("click", () => {
+      exhibits.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      currentExhibitIndex = 0;
+      persistExhibits();
+      refreshMuseumUI();
+      renderOrganizeGrid();
+      showToast("新しい順に並び替えました");
+    });
+
+    document.getElementById("btn-sort-diff").addEventListener("click", () => {
+      exhibits.sort((a, b) => b.difficulty - a.difficulty);
+      currentExhibitIndex = 0;
+      persistExhibits();
+      refreshMuseumUI();
+      renderOrganizeGrid();
+      showToast("むずかしい（★）順に並び替えました");
+    });
+
+    document.getElementById("btn-sort-fav").addEventListener("click", () => {
+      exhibits.sort((a, b) => (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0));
+      currentExhibitIndex = 0;
+      persistExhibits();
+      refreshMuseumUI();
+      renderOrganizeGrid();
+      showToast("👑 お気に入り優先順に並び替えました");
+    });
+
+    function renderOrganizeGrid() {
+      const grid = document.getElementById("organize-grid");
+      grid.innerHTML = "";
+
+      const filtered = exhibits
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (organizeFilter === "fav") return item.isFavorite;
+          if (organizeFilter === "hard") return item.difficulty >= 5;
+          return true;
+        });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center space-y-3">
+            <p class="text-slate-300 font-bold text-sm">この条件の作品はまだありません</p>
+            <p class="text-xs text-slate-400">「作品を登録」ボタンから新しい折り紙を追加しよう！</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(({ item, idx }) => {
+        const card = document.createElement("div");
+        card.className = "bg-slate-900/95 border border-slate-700/90 rounded-2xl p-3.5 flex flex-col justify-between gap-3";
+
+        card.innerHTML = `
+          <div class="space-y-2.5">
+            <div class="relative aspect-square rounded-xl overflow-hidden bg-black border border-white/10 group cursor-pointer btn-jump-view">
+              <img src="${item.images[0]}" class="w-full h-full object-cover" />
+              <span class="absolute top-2 left-2 bg-black/75 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                No.${String(idx + 1).padStart(3, "0")}
+              </span>
+              <button type="button" class="btn-card-fav tap-btn absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 border border-white/20 flex items-center justify-center text-sm">
+                ${item.isFavorite ? "👑" : "☆"}
+              </button>
+              <span class="absolute bottom-2 right-2 bg-black/75 text-slate-200 text-[10px] px-2 py-0.5 rounded-md">
+                ${item.paperSize}
+              </span>
+            </div>
+
+            <div>
+              <div class="text-xs text-amber-400">${"★".repeat(item.difficulty)}${"☆".repeat(5 - item.difficulty)}</div>
+              <h4 class="font-bold text-white text-sm truncate mt-0.5">${escapeHtml(item.title)}</h4>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 pt-2 border-t border-slate-800">
+            <!-- 展示順入れ替え（フィルター解除時のみ有効） -->
+            <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-move-prev tap-btn flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 text-xs font-bold text-slate-200" ${idx === 0 || organizeFilter !== "all" ? "disabled" : ""}>
+                ◀ 前へ
+              </button>
+              <button type="button" class="btn-move-next tap-btn flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-35 text-xs font-bold text-slate-200" ${idx === exhibits.length - 1 || organizeFilter !== "all" ? "disabled" : ""}>
+                次へ ▶
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-card-show tap-btn flex-1 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold">
+                👁️ 展示室で見る
+              </button>
+              <button type="button" class="btn-card-edit tap-btn px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-xs font-bold">
+                ✏️
+              </button>
+              <button type="button" class="btn-card-del tap-btn px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 text-xs font-bold">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
+
+        // イベント紐付け
+        card.querySelector(".btn-card-fav").addEventListener("click", (e) => {
+          e.stopPropagation();
+          item.isFavorite = !item.isFavorite;
+          persistExhibits();
+          renderOrganizeGrid();
+          refreshMuseumUI();
+        });
+
+        card.querySelector(".btn-move-prev").addEventListener("click", () => {
+          if (idx > 0) {
+            [exhibits[idx - 1], exhibits[idx]] = [exhibits[idx], exhibits[idx - 1]];
+            currentExhibitIndex = idx - 1;
+            persistExhibits();
+            refreshMuseumUI();
+            renderOrganizeGrid();
+          }
+        });
+
+        card.querySelector(".btn-move-next").addEventListener("click", () => {
+          if (idx < exhibits.length - 1) {
+            [exhibits[idx + 1], exhibits[idx]] = [exhibits[idx], exhibits[idx + 1]];
+            currentExhibitIndex = idx + 1;
+            persistExhibits();
+            refreshMuseumUI();
+            renderOrganizeGrid();
+          }
+        });
+
+        const jumpToExhibit = () => {
+          closeOrganizeModal();
+          selectExhibit(idx);
+        };
+        card.querySelector(".btn-jump-view").addEventListener("click", jumpToExhibit);
+        card.querySelector(".btn-card-show").addEventListener("click", jumpToExhibit);
+
+        card.querySelector(".btn-card-edit").addEventListener("click", () => {
+          openEditModal(idx);
+        });
+
+        card.querySelector(".btn-card-del").addEventListener("click", () => {
+          requestDeleteExhibit(idx);
+        });
+
+        grid.appendChild(card);
+      });
+    }
+
+    // トースト通知
+    let toastTimer = null;
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.classList.remove("opacity-0");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.add("opacity-0");
+      }, 3000);
+    }
+
+    // ==========================================
+    // 9. アニメーション＆360度ターンテーブル更新
+    // ==========================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // モーダル表示中はiPadのカメラ・動画処理を優先し、裏側の重たい描画をスキップ
+      if (isAnyModalOpen) return;
+
+      const elapsed = clock.getElapsedTime();
+      controls.update();
+
+      // 展示品の浮遊アニメーション
+      artworkStage.position.y = 1.52 + Math.sin(elapsed * 1.8) * 0.035;
+
+      // 色紙パーティクルのひらひらアニメーション
+      confettiGroup.children.forEach(piece => {
+        piece.position.y -= piece.userData.speedY;
+        piece.position.x += Math.sin(elapsed + piece.userData.phase) * 0.002;
+        piece.rotation.x += piece.userData.rotSpeed;
+        piece.rotation.y += piece.userData.rotSpeed * 0.8;
+        if (piece.position.y < 0.1) {
+          piece.position.y = 4.8;
+        }
+      });
+
+      if (activeTurnTableData) {
+        const camAngle = Math.atan2(
+          camera.position.x - artworkStage.position.x,
+          camera.position.z - artworkStage.position.z
+        );
+
+        if (autoRotate) {
+          artworkStage.userData.virtualRot = (artworkStage.userData.virtualRot || 0) + 0.009;
+        }
+        const virtualRot = artworkStage.userData.virtualRot || 0;
+
+        if (activeTurnTableData.isSingleImage) {
+          // 1枚額装パネルは立体物としてそのまま回転
+          activeTurnTableData.group.rotation.y = virtualRot;
+        } else {
+          // 複数アングル360°スキャン作品はカメラ向きに正対しつつ角度に応じたフレームへ切替
+          activeTurnTableData.group.rotation.y = camAngle;
+          const count = activeTurnTableData.textures.length;
+          let relAngle = (camAngle - virtualRot) % (Math.PI * 2);
+          if (relAngle < 0) relAngle += Math.PI * 2;
+          const step = (Math.PI * 2) / count;
+          const idx = Math.floor((relAngle + step / 2) / step) % count;
+
+          if (idx !== activeTurnTableData.lastIdx) {
+            activeTurnTableData.lastIdx = idx;
+            activeTurnTableData.panelMat.map = activeTurnTableData.textures[idx];
+            activeTurnTableData.panelMat.needsUpdate = true;
+            document.getElementById("angle-step-text").textContent = `${idx + 1} / ${count}`;
+          }
+        }
+      } else {
+        // 0作品時の「黄金の光の折り鶴」の回転
+        if (autoRotate) {
+          artworkStage.rotation.y += 0.008;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ==========================================
+    // 10. 起動処理
+    // ==========================================
+    // 10. 起動処理（IndexedDBから保存済み作品を自動復元）
+    // ==========================================
+    window.onload = async function () {
+      initOneTapFormControls();
+      const dbOk = await OrigamiDB.init();
+      const dbBadge = document.getElementById("db-status-badge");
+      if (dbOk) {
+        const saved = await OrigamiDB.loadAll();
+        if (Array.isArray(saved) && saved.length > 0) {
+          exhibits = saved;
+        }
+        if (dbBadge) dbBadge.textContent = "💾 自動保存ON";
+      } else {
+        if (dbBadge) dbBadge.textContent = "⚠️ 一時保存モード";
+      }
+      refreshMuseumUI();
+      animate();
+    };
+  </script>
+</body>
+</html>
